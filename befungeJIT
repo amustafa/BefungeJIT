@@ -1,0 +1,199 @@
+#!/usr/bin/env python
+# For more information on Befunge visit: http://en.wikipedia.org/wiki/Befunge
+import sys
+import random
+
+program_filename = sys.argv[1]
+program_file = open(program_filename, 'r')
+program_rows = program_file.read().splitlines()
+program = [list(row) for row in program_rows]
+
+row_lens = [len(row) for row in program]
+if not all([row_lens[0] == row_len for row_len in row_lens]:  # makes sure each row is the same length
+  raise InputError("Every row in the supplied program does not have the same length")
+
+# Directions
+RIGHT = 0
+LEFT = 1
+DOWN = 3
+UP = 2
+
+# Start Execution State
+stack = []
+loc = [0, 0]
+direction = RIGHT
+is_string_mode = False
+current_instruction = program[loc[0]][loc[1]]
+
+
+def is_number(test_value):
+    try:
+        float(test_value)
+        return True
+    except ValueError:
+        return False
+
+
+def get_next():
+    if direction == RIGHT:
+        loc[1] = (loc[1] + 1) % len(program[loc[0]])
+    elif direction == LEFT:
+        loc[1] = (loc[1] - 1) % len(program[loc[0]])
+    elif direction == UP:
+        loc[0] = (loc[0] - 1) % len(program)
+    elif direction == DOWN:
+        loc[0] = (loc[0] + 1) % len(program)
+    return program[loc[0]][loc[1]]
+
+
+# Execute Program
+while current_instruction is not "@":
+    if is_string_mode:  # if in string mode, push each character's ASCII value all the way up to the next "
+        if current_instruction == '"':
+            is_string_mode = False
+        else:
+            stack.append(ord(current_instruction))
+
+    elif len(current_instruction) == 1 and current_instruction in '0123456789':  # 0-9	Push this number on the stack
+        stack.append(int(current_instruction))
+
+    elif current_instruction == "+":  # +	Addition: Pop a and b, then push a+b
+        a = stack.pop()
+        b = stack.pop()
+        stack.append(b + a)
+
+    elif current_instruction == "-":  # -	Subtraction: Pop a and b, then push b-a
+        a = stack.pop()
+        b = stack.pop()
+        stack.append(b - a)
+
+    elif current_instruction == "*":  # *	Multiplication: Pop a and b, then push a*b
+        a = stack.pop()
+        b = stack.pop()
+        stack.append(b * a)
+
+    elif current_instruction == "/":  # /	Integer division: Pop a and b, then push b/a, rounded down.
+        # Note: on wiki it says "If a is zero, ask the user what result they want", but it is not completely supported
+        a = stack.pop()
+        b = stack.pop()
+        stack.append(b / a)  # should be integer division
+
+    elif current_instruction == "%":  # %	Modulo: Pop a and b, then push the remainder of the integer division of b/a.
+        # Note: on wiki it says "If a is zero, ask the user what result they want", but it is not completely supported
+        a = stack.pop()
+        b = stack.pop()
+        stack.append(b % a)
+
+    elif current_instruction == "!":  # !	Logical NOT: Pop a value. If the value is zero, push 1; otherwise, push zero.
+        a = stack.pop()
+        if a == 0:
+            stack.append(1)
+        else:
+            stack.append(0)
+
+    elif current_instruction == "`":  # `	Greater than: Pop a and b, then push 1 if b>a, otherwise zero.
+        a = stack.pop()
+        b = stack.pop()
+        if b > a:
+            stack.append(1)
+        else:
+            stack.append(0)
+
+    # directional functions
+    elif current_instruction == ">":  # >	Start moving right
+        direction = RIGHT
+
+    elif current_instruction == "<":  # <	Start moving left
+        direction = LEFT
+
+    elif current_instruction == "^":  # ^	Start moving up
+        direction = UP
+
+    elif current_instruction == "v":  # v	Start moving down
+        direction = DOWN
+
+    elif current_instruction == "?":  # v	Start moving in a random cardinal direction
+        direction = random.choice([RIGHT, LEFT, UP, DOWN])
+
+    elif current_instruction == "_":  # _	Pop a value; move right if value=0, left otherwise
+        a = stack.pop()
+        if a == 0:
+            direction = RIGHT
+        else:
+            direction = LEFT
+
+    elif current_instruction == "|":  # |	Pop a value; move down if value=0, up otherwise
+        a = stack.pop()
+        if a == 0:
+            direction = DOWN
+        else:
+            direction = UP
+
+    elif current_instruction == '"':  # " Start string mode: push each character's ASCII value until the next "
+        is_string_mode = True
+
+    elif current_instruction == ":":  # :	Duplicate value on top of the stack
+        stack.append(stack[-1])
+
+    elif current_instruction == "\\":  # \	Swap two values on top of the stack
+        a = stack.pop()
+        b = stack.pop()
+        stack.append(a)
+        stack.append(b)
+
+    elif current_instruction == "$":  # $	Pop value from the stack and discard it
+        stack.pop()
+
+    elif current_instruction == ".":  # .	Pop value and output as an integer
+        v = stack.pop()
+        sys.stdout.write(str(v))
+
+    elif current_instruction == ",":  # ,	Pop value and output as an ASCII
+        v = stack.pop()
+        if type(v) == int:
+            v = chr(v)
+        sys.stdout.write(v)
+
+    elif current_instruction == "#":  # #	Trampoline: Skip next cell
+        current_instruction = get_next()  # make the program think at the end of this loop that we are in a new place
+
+    elif current_instruction == "p":
+        # A "put" call (a way to store a value for later use).
+        # Pop y, x and v, then change the character at the position (x,y)
+        # in the program to the character with ASCII value v
+        y = stack.pop()
+        x = stack.pop()
+        v = stack.pop()
+        program[y][x] = v  # program is stored in rows so y must be referenced first.
+
+    elif current_instruction == "g":
+        # A "get" call (a way to retrieve data in storage).
+        # Pop y and x, then push ASCII value of the character at that position in the program
+        y = stack.pop()
+        x = stack.pop()
+        v = program[y][x]
+        if type(v) == int:
+            v = chr(v)
+        stack.append(v)  # program is stored in rows so y must be referenced first.
+
+    elif current_instruction == "&":  # &	Ask user for a number and push it
+        v = None
+        while v is None or not is_number(v):
+            v = raw_input(">>Please enter a number:\n>> ")
+        stack.append(int(v))  # user will type it in so we use 'int' to convert and not ord
+
+    elif current_instruction == "~":  # ~	Ask user for a character and push its ASCII value
+        v = ''
+        while len(v) is not 1 or not (ord(v) < 128):
+            v = raw_input(">>Please enter a single ASCII character:\n>>")
+        stack.append(v)
+
+    elif current_instruction == " ":  # No-op. Does nothing
+        pass
+
+    else:
+        raise ValueError("'{}' is not a Befunge instruction".format(current_instruction))
+
+    current_instruction = get_next()
+
+sys.stdout.write('\nFinished Executing\n')
