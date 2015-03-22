@@ -8,10 +8,6 @@ program_file = open(program_filename, 'r')
 program_rows = program_file.read().splitlines()
 program = [list(row) for row in program_rows]
 
-row_lens = [len(row) for row in program]
-if not all([row_lens[0] == row_len for row_len in row_lens]:  # makes sure each row is the same length
-  raise InputError("Every row in the supplied program does not have the same length")
-
 # Directions
 RIGHT = 0
 LEFT = 1
